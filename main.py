@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import os
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import our new router
@@ -9,6 +10,8 @@ app = FastAPI(
     description="Backend service for a private, group-based social platform",
     version="1.0.0"
 )
+
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,3 +30,6 @@ app.include_router(auth.router)
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "Family Group API is running!"}
+
+port = int(os.environ.get("PORT", 5000))
+app.run(host="0.0.0.0", port=port)
