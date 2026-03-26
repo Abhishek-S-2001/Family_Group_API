@@ -5,8 +5,8 @@ from datetime import datetime
 import uuid
 import json
 
-from app.dependencies import get_current_user_id
-from app.database import get_db
+from app.utils.dependencies import get_current_user_id
+from app.utils.database import get_db
 
 router = APIRouter(
     prefix="/chat",

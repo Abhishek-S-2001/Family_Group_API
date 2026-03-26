@@ -5,8 +5,8 @@ from typing import Optional
 import uuid
 import secrets
 
-from app.database import get_db
-from app.dependencies import get_current_user_id
+from app.utils.database import get_db
+from app.utils.dependencies import get_current_user_id
 import smtplib
 from email.message import EmailMessage
 import os

@@ -1,12 +1,18 @@
 from fastapi import Depends, HTTPException, Header
 from supabase import Client
-from app.database import get_db
+from app.utils.database import get_db
 
-def get_current_user_id(authorization: str = Header(...), db: Client = Depends(get_db)):
+# Notice we changed Header(...) to Header(None)
+def get_current_user_id(authorization: str = Header(None), db: Client = Depends(get_db)):
     """
     Dependency that extracts the JWT token from the header,
     verifies it with Supabase, and returns the secure user_id.
     """
+    
+    # 1. Catch missing headers completely and force a 401
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid Authorization header format. Must be 'Bearer <token>'")
     
@@ -24,4 +30,5 @@ def get_current_user_id(authorization: str = Header(...), db: Client = Depends(g
         return user_response.user.id
         
     except Exception as e:
+        # Guarantee a 401 even if Supabase throws a 400 AuthApiError under the hood
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
