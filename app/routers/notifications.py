@@ -42,6 +42,22 @@ def get_notifications(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.patch("/read-all")
+def mark_all_as_read(
+    db: Client = Depends(get_db), 
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Mobile/Web calls this when a user hits 'Mark all as read'."""
+    try:
+        db.table("notifications")\
+            .update({"is_read": True})\
+            .eq("user_id", current_user_id)\
+            .eq("is_read", False)\
+            .execute()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.patch("/{notification_id}/read")
 def mark_as_read(
     notification_id: str, 
@@ -54,22 +70,6 @@ def mark_as_read(
             .update({"is_read": True})\
             .eq("id", notification_id)\
             .eq("user_id", current_user_id)\
-            .execute()
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.patch("/read-all")
-def mark_all_as_read(
-    db: Client = Depends(get_db), 
-    current_user_id: str = Depends(get_current_user_id)
-):
-    """Mobile/Web calls this when a user hits 'Mark all as read'."""
-    try:
-        db.table("notifications")\
-            .update({"is_read": True})\
-            .eq("user_id", current_user_id)\
-            .eq("is_read", False)\
             .execute()
         return {"status": "success"}
     except Exception as e:

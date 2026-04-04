@@ -46,7 +46,8 @@ def sign_up(user: UserSignUp, db: Client = Depends(get_db)):
         db.table("profiles").insert({
             "id": user_id,
             "username": user.username,
-            "email": user.email
+            "email": user.email,
+            "terms_accepted": False
         }).execute()
         
         if auth_response.session is None:
