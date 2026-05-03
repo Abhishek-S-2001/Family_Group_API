@@ -25,7 +25,63 @@ class ProfileUpdate(BaseModel):
     avatar_url: Optional[str] = None
     cover_photo_url: Optional[str] = None
 
+
+# --- HELPERS ---
+def _get_user_memories(db: Client, user_id: str, allow_pending: bool = False):
+    """Fetches approved photo/video posts for a user, returns total count and top 4 recent items."""
+    media_resp = db.table("posts")\
+        .select("id, image_path, created_at, caption, post_type, moderation_status")\
+        .eq("author_id", user_id)\
+        .order("created_at", desc=True)\
+        .execute()
+        
+    posts_data = media_resp.data or []
+    
+    valid_media = []
+    for p in posts_data:
+        # Filter moderation
+        mod_status = p.get("moderation_status")
+        allowed_statuses = ["approved", None]
+        if allow_pending:
+            allowed_statuses.append("pending")
+            
+        if mod_status not in allowed_statuses:
+            continue
+            
+        # Detect post type matching feed logic
+        raw_type = p.get("post_type") or "photo"
+        image_path = p.get("image_path") or ""
+        
+        is_text = raw_type == "text" or image_path == "__text__"
+        is_proposal = raw_type == "proposal" or image_path == "__proposal__"
+        
+        if not is_text and not is_proposal:
+            # It's a photo or video
+            actual_type = "video" if (raw_type == "video" or image_path == "__video__") else "photo"
+            
+            url = None
+            if image_path and not image_path.startswith("__"):
+                url = db.storage.from_("group-media").get_public_url(image_path)
+            
+            valid_media.append({
+                "id": p["id"],
+                "url": url,
+                "type": actual_type,
+                "caption": p.get("caption"),
+                "created_at": p.get("created_at")
+            })
+            
+    media_count = len(valid_media)
+    recent = valid_media[:4]
+        
+    return media_count, recent
+
 # --- ENDPOINTS ---
+
+@router.get("/debug_posts")
+def debug_posts(db: Client = Depends(get_db)):
+    # Temporary debug endpoint
+    return db.table("posts").select("*").execute().data
 
 @router.get("/me")
 def get_my_profile(db: Client = Depends(get_db), current_user_id: str = Depends(get_current_user_id)):
@@ -90,16 +146,25 @@ def get_my_profile(db: Client = Depends(get_db), current_user_id: str = Depends(
                     
                 members_list = list(unique_members.values())
 
-        # 4. Return everything to Next.js!
+        # 4. Fetch User Memories (Photos/Videos)
+        media_count, recent_memories = _get_user_memories(db, current_user_id, allow_pending=True)
+        
+        # DEBUG
+        debug_resp = db.table("posts").select("id, author_id, post_type, moderation_status, image_path").execute()
+
+        # 5. Return everything to Next.js!
         return {
             "profile": profile,
             "stats": {
                 "silos_joined": len(silos_list),
                 "known_members": len(members_list),
-                "media_posts": 0 # We will link this when we build the Photo Vault
+                "media_posts": media_count
             },
+            "recent_memories": recent_memories,
             "silos_list": silos_list,
-            "members_list": members_list
+            "members_list": members_list,
+            "debug_all_posts": debug_resp.data,
+            "debug_current_user_id": current_user_id
         }
 
     except Exception as e:
@@ -284,7 +349,22 @@ def get_public_profile(target_user_id: str, db: Client = Depends(get_db)):
         if not profile.get("show_hobbies"):
             profile["hobbies"] = []
             
-        return profile
+        # Fetch shared silos count to approximate "silos_joined" for public view
+        silos_resp = db.table("group_members").select("group_id").eq("user_id", target_user_id).execute()
+        silos_joined = len(silos_resp.data) if silos_resp.data else 0
+
+        # Fetch memories
+        media_count, recent_memories = _get_user_memories(db, target_user_id)
+            
+        return {
+            "profile": profile,
+            "stats": {
+                "silos_joined": silos_joined,
+                "known_members": 0, # Could be calculated similarly if needed
+                "media_posts": media_count
+            },
+            "recent_memories": recent_memories
+        }
         
     except Exception as e:
         print("Error fetching public profile:", e)
